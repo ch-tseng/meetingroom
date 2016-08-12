@@ -149,8 +149,7 @@ def getBookStatus():
     global nowHour, defaultVolume
 
     r = requests.get(
-        #        'http://data.sunplusit.com/Api/Meetingroom?code=7EE75E3E74A555A0482578ED00223AEF&room=%E8%8E%8E%E5%A3%AB%E6%AF%94%E4%BA%9E')
-        'http://data.sunplusit.com/Api/Meetingroom?code=7EE75E3E74A555A0482578ED00223AEF&room=' + meetroom)
+        'http://data.sunplusit.com/Api/Meetingroom?code={YOUR SECURITY_CODE}&room=' + meetroom)
     if is_json(r.text):
         jsonData = json.loads(r.text)
         if len(jsonData) > 0:
