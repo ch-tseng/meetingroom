@@ -6,13 +6,15 @@ import RPi.GPIO as GPIO
 import requests
 import mcp3008
 import time
+from time import sleep
 import json
 import Adafruit_DHT as dht
+from picamera import PiCamera
 import random
 from subprocess import call
 import logging
 logger = logging.getLogger('main')
-hdlr = logging.FileHandler('/home/pi/meetingroom/main.log')
+hdlr = logging.FileHandler('/captured/room02/main.log')
 #formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
 formatter = logging.Formatter('%(message)s')
 hdlr.setFormatter(formatter)
@@ -23,11 +25,20 @@ logger.setLevel(logging.INFO)
 meetroom = "亞歷山大"
 speak = 1
 pirDelay = 300  # seconds
-defaultVolume = 750
+defaultVolume = 900
 logs = 1  #是否要logging
+pic_take = 1  #是否拍照?
+pic_width = 320  #長邊尺寸
+pic_frequency = 120  #120秒拍一次
+pic_savepath = '/captured/room02/imgs/'
 
 #========================================================
-
+if pic_take == 1:
+    camera = PiCamera()
+    camera.resolution = ( pic_width, int((pic_width/2592)*1944) )
+    camera.contrast = 80
+    camera.rotation = 180
+    camera.brightness = 65
 
 pinDHT22 = 13  # GPIO 13
 pinPIR = 35
@@ -58,6 +69,8 @@ welcomeMSG = ["wav/welcome1.mp3", "wav/welcome2.mp3",
               "wav/welcome3.mp3", "wav/welcome4.mp3"]
 sensorTemperture = 0
 sensorHumdity = 0
+
+last_takePic = time.time()  #上次拍攝相片時間
 
 #===Functions===========================================================
 
@@ -149,7 +162,7 @@ def getBookStatus():
     global nowHour, defaultVolume
 
     r = requests.get(
-        'http://data.sunplusit.com/Api/Meetingroom?code={YOUR SECURITY_CODE}&room=' + meetroom)
+        'http://data.sunplusit.com/Api/Meetingroom?code=7EE75E3E74A555A0482578ED00223AEF&room=' + meetroom)
     if is_json(r.text):
         jsonData = json.loads(r.text)
         if len(jsonData) > 0:
@@ -220,6 +233,37 @@ def getBookStatus():
             else:
                 playAudio(defaultVolume, "wav/noOneBookAllDayToday.mp3")
 
+def take_pic(lightDegree):
+    global last_takePic, pic_frequency, pic_savepath
+    #print (time.time() - last_takePic, pic_frequency)
+    if (time.time() - last_takePic) > pic_frequency:
+
+        if lightDegree<=100:
+            camera.brightness = 80
+        else:
+            camera.brightness = 55
+
+#        if lightDegree<=50:
+#            camera.brightness = 100
+#        elif lightDegree>50 and lightDegree<=100:
+#            camera.brightness = 80
+#        elif lightDegree>150 and lightDegree<=350:
+#            camera.ISO = 600
+#            camera.exposure_compensation = 25
+#        elif lightDegree>350 and lightDegree<=700:
+#            camera.ISO = 400
+#            camera.exposure_compensation = 10
+#        elif lightDegree>700 and lightDegree<=900:
+#            camera.ISO = 200
+#            camera.exposure_compensation = 5
+#        elif lightDegree>900:
+#            camera.ISO = 100
+
+        picIndex = time.strftime("%Y%m%d%H%M%S", time.localtime())
+        camera.capture(pic_savepath + picIndex + '.jpg')
+
+        last_takePic = time.time()
+
 # for Interrupts--------------------------
 
 
@@ -259,8 +303,15 @@ try:
         nowMinute = dt[4]
 
         sensorHumdity, sensorTemperture = dht.read_retry(dht.DHT22, pinDHT22)
-        sensorHumdity = int(sensorHumdity)
-        sensorTemperture = int(sensorTemperture)
+        if sensorHumdity is None:
+            sensorHumdity = 0
+        else:
+            sensorHumdity = int(sensorHumdity)
+
+        if sensorTemperture is None:
+            sensorTemperture = 0
+        else:
+            sensorTemperture = int(sensorTemperture)
 
         adc = mcp3008.MCP3008()
         tmpValue = adc.read([mcp3008.CH0])
@@ -297,7 +348,7 @@ try:
         lightLED(ledMode)
 
         if logs == 1:
-            #format -->  LedMode: DateTime,Temperature,Humandity,Sound,RightLightness,CenterLightness,LeftLightness,PIR
+            #format -->  LedMode: DateTime,Temperature,Humandity,Sound,RightLightness,CenterLightness,LeftLightness,PIR, ledMode
             txtMSG = str(nowYear) + "/" + str(nowMonth) + "/" + str(nowDay) + " " + str(nowHour) + ":" + str(nowMinute) + "," + \
                 str(sensorTemperture) + "," + str(sensorHumdity) + "," + str(sensorSound) + "," + \
                 str(sensorLight_r) + "," + str(sensorLight_c) + "," + str(sensorLight_l) + "," + str(pirValueNow) + "," + str(ledMode)
@@ -310,6 +361,7 @@ try:
 
             print(txtMSG)
 
+        take_pic(sensorLight_c)
         time.sleep(5)
 
 except:
